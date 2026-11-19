@@ -4,28 +4,24 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 
-/** Fired by AlarmManager. Starts the ringing service and books the next occurrence. */
+/** Fired by AlarmManager: book the following ring, then start ringing this one. */
 public class AlarmReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context ctx, Intent intent) {
-        int id = intent.getIntExtra(AlarmScheduler.EXTRA_ID, 0);
-        boolean snooze = intent.getBooleanExtra(AlarmScheduler.EXTRA_SNOOZE, false);
-        Alarm a = AlarmStore.get(ctx, id);
-        if (a == null) return;                       // deleted meanwhile
-        if (!snooze && !a.enabled) return;
+        long now = System.currentTimeMillis();
+        long t = intent.getLongExtra(AlarmScheduler.EXTRA_TIME, now);
+        // +1 s guards against the alarm firing a few ms early and re-booking itself.
+        AlarmScheduler.scheduleNext(ctx, Math.max(now, t) + 1000);
 
-        if (!snooze) {
-            if (a.days == 0) {
-                a.enabled = false;                   // one-shot: turn off
-                AlarmStore.put(ctx, a);
-            } else {
-                AlarmScheduler.schedule(ctx, a);     // repeating: next day
-            }
-        }
+        WakeWindow w = WakeWindow.load(ctx);
+        if (!w.enabled || t <= w.dismissedUntil) return;   // stale booking
 
         Intent svc = new Intent(ctx, AlarmService.class)
-                .setAction(AlarmService.ACTION_START)
-                .putExtra(AlarmScheduler.EXTRA_ID, id);
+                .setAction(AlarmService.ACTION_RING)
+                .putExtra(AlarmScheduler.EXTRA_INDEX, intent.getIntExtra(AlarmScheduler.EXTRA_INDEX, 0))
+                .putExtra(AlarmScheduler.EXTRA_COUNT, intent.getIntExtra(AlarmScheduler.EXTRA_COUNT, 1))
+                .putExtra(AlarmScheduler.EXTRA_WINDOW_END,
+                        intent.getLongExtra(AlarmScheduler.EXTRA_WINDOW_END, now));
         // setAlarmClock broadcasts are exempt from background FGS-start restrictions.
         ctx.startForegroundService(svc);
     }

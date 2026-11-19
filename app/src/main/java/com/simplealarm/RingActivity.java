@@ -33,9 +33,12 @@ public class RingActivity extends Activity {
                 | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
                 | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
 
-        int id = getIntent().getIntExtra(AlarmScheduler.EXTRA_ID, 0);
-        Alarm a = AlarmStore.get(this, id);
-        String label = a != null && !a.label.isEmpty() ? a.label : "Alarm";
+        int index = getIntent().getIntExtra(AlarmScheduler.EXTRA_INDEX, 0);
+        int count = getIntent().getIntExtra(AlarmScheduler.EXTRA_COUNT, 1);
+        boolean last = index >= count - 1;
+        WakeWindow w = WakeWindow.load(this);
+        String label = (last ? "Last alarm" : "Alarm " + (index + 1) + " of " + count)
+                + "\nwindow " + WakeWindow.hhmm(w.startMin) + " – " + WakeWindow.hhmm(w.endMin);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -58,21 +61,23 @@ public class RingActivity extends Activity {
         lbl.setPadding(0, dp(8), 0, dp(48));
         root.addView(lbl);
 
-        Button snooze = new Button(this);
-        snooze.setText("Snooze " + AlarmService.SNOOZE_MINUTES + " min");
-        snooze.setTextSize(20);
-        snooze.setOnClickListener(v -> send(AlarmService.ACTION_SNOOZE));
-        root.addView(snooze, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(72)));
+        if (!last) {
+            Button stop = new Button(this);
+            stop.setText("Stop (next in " + WakeWindow.STEP_MIN + " min)");
+            stop.setTextSize(20);
+            stop.setOnClickListener(v -> send(AlarmService.ACTION_STOP));
+            root.addView(stop, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, dp(72)));
+        }
 
-        Button dismiss = new Button(this);
-        dismiss.setText("Dismiss");
-        dismiss.setTextSize(20);
-        dismiss.setOnClickListener(v -> send(AlarmService.ACTION_DISMISS));
+        Button awake = new Button(this);
+        awake.setText("I'm up — cancel the rest");
+        awake.setTextSize(20);
+        awake.setOnClickListener(v -> send(AlarmService.ACTION_AWAKE));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(72));
         lp.topMargin = dp(16);
-        root.addView(dismiss, lp);
+        root.addView(awake, lp);
 
         setContentView(root);
 
