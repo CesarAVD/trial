@@ -5,8 +5,7 @@ import android.app.Activity;
 import android.app.NotificationManager;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Color;
-import android.graphics.Insets;
+import android.content.res.ColorStateList;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
@@ -15,10 +14,9 @@ import android.os.PowerManager;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
-import android.view.WindowInsets;
-import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Space;
 import android.widget.Switch;
 import android.widget.TextClock;
 import android.widget.TextView;
@@ -30,28 +28,31 @@ public class MainActivity extends Activity {
     private WakeWindow w;
     private DialView dial;
     private TextView startText, endText, nextText;
-    private Switch enabledSwitch;
     private final TextView[] chips = new TextView[7];
     private LinearLayout warnings;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Ui.edgeToEdge(this);
         w = WakeWindow.load(this);
 
         ScrollView scroll = new ScrollView(this);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.setClipToPadding(false);
+        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Ui.BG_GLOW, Ui.BG, Ui.BG});
+        scroll.setBackground(bg);
+        Ui.applyInsets(scroll, dp(20));
+
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(root);
-        int pad = dp(16);
-        applyInsets(scroll, pad);
 
-        TextClock clock = new TextClock(this);
-        clock.setFormat12Hour("HH:mm");
-        clock.setFormat24Hour("HH:mm");
-        clock.setTextSize(28);
-        clock.setGravity(Gravity.CENTER);
-        root.addView(clock);
+        root.addView(header());
+
+        nextText = Ui.text(this, "", 15, Ui.TEXT2, Ui.REGULAR);
+        root.addView(nextText, Ui.lp(-1, -2, 0, dp(6)));
 
         dial = new DialView(this);
         dial.setWindow(w.startMin, w.endMin);
@@ -61,48 +62,28 @@ public class MainActivity extends Activity {
             updateTimeTexts();
             if (finished) persist();
         });
-        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        dlp.topMargin = dp(8);
-        root.addView(dial, dlp);
+        root.addView(dial, Ui.lp(-1, -2, 0, dp(12)));
 
-        startText = new TextView(this);
-        endText = new TextView(this);
-        root.addView(timeRow("Earliest", startText, DialView.GENTLE, true));
-        root.addView(timeRow("Latest", endText, DialView.HOT, false));
+        LinearLayout times = new LinearLayout(this);
+        startText = Ui.text(this, "", 40, Ui.TEXT, Ui.THIN);
+        endText = Ui.text(this, "", 40, Ui.TEXT, Ui.THIN);
+        times.addView(timeCard("Earliest", startText, Ui.GENTLE, true), Ui.lp(0, -2, 1, 0));
+        times.addView(new Space(this), new LinearLayout.LayoutParams(dp(12), 1));
+        times.addView(timeCard("Latest", endText, Ui.HOT, false), Ui.lp(0, -2, 1, 0));
+        root.addView(times, Ui.lp(-1, -2, 0, dp(16)));
 
-        root.addView(dayChips());
-
-        LinearLayout swRow = new LinearLayout(this);
-        swRow.setGravity(Gravity.CENTER_VERTICAL);
-        swRow.setPadding(0, dp(12), 0, 0);
-        TextView swLabel = new TextView(this);
-        swLabel.setText("Alarms on");
-        swLabel.setTextSize(18);
-        swRow.addView(swLabel, new LinearLayout.LayoutParams(0, -2, 1f));
-        enabledSwitch = new Switch(this);
-        enabledSwitch.setChecked(w.enabled);
-        enabledSwitch.setOnCheckedChangeListener((b, on) -> {
-            w.enabled = on;
-            persist();
-        });
-        swRow.addView(enabledSwitch);
-        root.addView(swRow);
-
-        nextText = new TextView(this);
-        nextText.setGravity(Gravity.CENTER);
-        nextText.setTextSize(16);
-        nextText.setPadding(0, dp(12), 0, dp(12));
-        root.addView(nextText);
+        root.addView(daysCard(), Ui.lp(-1, -2, 0, dp(12)));
+        root.addView(toggleCard(), Ui.lp(-1, -2, 0, dp(12)));
 
         warnings = new LinearLayout(this);
         warnings.setOrientation(LinearLayout.VERTICAL);
         root.addView(warnings);
 
         LinearLayout previews = new LinearLayout(this);
-        previews.addView(previewButton("Preview first", 0, 2), new LinearLayout.LayoutParams(0, -2, 1f));
-        previews.addView(previewButton("Preview last", 1, 2), new LinearLayout.LayoutParams(0, -2, 1f));
-        root.addView(previews);
+        previews.addView(previewPill("Preview gentle", 0), Ui.lp(0, -2, 1, 0));
+        previews.addView(new Space(this), new LinearLayout.LayoutParams(dp(12), 1));
+        previews.addView(previewPill("Preview intense", 1), Ui.lp(0, -2, 1, 0));
+        root.addView(previews, Ui.lp(-1, -2, 0, dp(16)));
 
         setContentView(scroll);
         updateTimeTexts();
@@ -129,39 +110,51 @@ public class MainActivity extends Activity {
         refreshNext(AlarmScheduler.scheduleNext(this));
     }
 
-    // ---------- UI pieces ----------
+    // ---------- sections ----------
 
-    private View timeRow(String name, TextView value, int color, boolean isStart) {
+    private View header() {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(4), 0, dp(4));
-
-        View dot = new View(this);
-        GradientDrawable dd = new GradientDrawable();
-        dd.setShape(GradientDrawable.OVAL);
-        dd.setColor(color);
-        dot.setBackground(dd);
-        LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(dp(14), dp(14));
-        dotLp.rightMargin = dp(10);
-        row.addView(dot, dotLp);
-
-        TextView label = new TextView(this);
-        label.setText(name);
-        label.setTextSize(18);
-        row.addView(label, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        row.addView(stepButton("−", isStart, -WakeWindow.STEP_MIN));
-        value.setTextSize(24);
-        value.setGravity(Gravity.CENTER);
-        row.addView(value, new LinearLayout.LayoutParams(dp(96), -2));
-        row.addView(stepButton("+", isStart, WakeWindow.STEP_MIN));
+        TextView title = Ui.text(this, "Wake", 30, Ui.TEXT, Ui.MEDIUM);
+        title.setLetterSpacing(-0.01f);
+        row.addView(title, Ui.lp(0, -2, 1, 0));
+        TextClock clock = new TextClock(this);
+        clock.setFormat12Hour("HH:mm");
+        clock.setFormat24Hour("HH:mm");
+        clock.setTextSize(15);
+        clock.setTextColor(Ui.TEXT);
+        clock.setTypeface(Ui.MEDIUM);
+        clock.setGravity(Gravity.CENTER);
+        clock.setPadding(dp(14), dp(8), dp(14), dp(8));
+        clock.setBackground(Ui.rounded(Ui.SURFACE2, dp(18), 0, 0));
+        row.addView(clock);
         return row;
     }
 
-    private Button stepButton(String text, boolean isStart, int delta) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setTextSize(20);
+    private View timeCard(String name, TextView value, int color, boolean isStart) {
+        LinearLayout card = Ui.card(this);
+
+        LinearLayout head = new LinearLayout(this);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        View dot = new View(this);
+        dot.setBackground(Ui.oval(color, 0, 0));
+        head.addView(dot, new LinearLayout.LayoutParams(dp(8), dp(8)));
+        head.addView(new Space(this), new LinearLayout.LayoutParams(dp(8), 1));
+        head.addView(Ui.caps(this, name, Ui.TEXT2));
+        card.addView(head);
+
+        card.addView(value, Ui.lp(-2, -2, 0, dp(10)));
+
+        LinearLayout steps = new LinearLayout(this);
+        steps.addView(stepButton("−", isStart, -WakeWindow.STEP_MIN));
+        steps.addView(new Space(this), new LinearLayout.LayoutParams(dp(8), 1));
+        steps.addView(stepButton("+", isStart, WakeWindow.STEP_MIN));
+        card.addView(steps, Ui.lp(-2, -2, 0, dp(14)));
+        return card;
+    }
+
+    private View stepButton(String glyph, boolean isStart, int delta) {
+        TextView b = Ui.roundButton(this, glyph, 40);
         b.setOnClickListener(v -> {
             if (isStart) w.startMin = Math.floorMod(w.startMin + delta, WakeWindow.DAY_MIN);
             else w.endMin = Math.floorMod(w.endMin + delta, WakeWindow.DAY_MIN);
@@ -169,61 +162,74 @@ public class MainActivity extends Activity {
             updateTimeTexts();
             persist();
         });
-        b.setLayoutParams(new LinearLayout.LayoutParams(dp(56), dp(48)));
         return b;
     }
 
-    private View dayChips() {
+    private View daysCard() {
+        LinearLayout card = Ui.card(this);
+        card.addView(Ui.caps(this, "Repeat", Ui.TEXT2));
         LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER);
-        row.setPadding(0, dp(12), 0, 0);
+        row.setGravity(Gravity.CENTER_VERTICAL);
         for (int i = 0; i < 7; i++) {
+            if (i > 0) row.addView(new Space(this), new LinearLayout.LayoutParams(0, 1, 1f));
             final int bit = i;
-            TextView c = new TextView(this);
-            c.setText(DAY_LETTERS[i]);
+            TextView c = Ui.text(this, DAY_LETTERS[i], 14, Ui.TEXT, Ui.MEDIUM);
             c.setGravity(Gravity.CENTER);
-            c.setTextSize(16);
             c.setOnClickListener(v -> {
                 w.days ^= 1 << bit;
                 styleChips();
                 persist();
             });
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(40), dp(40));
-            lp.leftMargin = lp.rightMargin = dp(3);
-            row.addView(c, lp);
+            row.addView(c, new LinearLayout.LayoutParams(dp(36), dp(36)));
             chips[i] = c;
         }
+        card.addView(row, Ui.lp(-1, -2, 0, dp(12)));
         styleChips();
-        return row;
+        return card;
     }
 
     private void styleChips() {
         for (int i = 0; i < 7; i++) {
             boolean on = (w.days & (1 << i)) != 0;
-            GradientDrawable bg = new GradientDrawable();
-            bg.setShape(GradientDrawable.OVAL);
-            if (on) {
-                bg.setColor(Color.rgb(61, 123, 247));
-                chips[i].setTextColor(Color.WHITE);
-            } else {
-                bg.setColor(Color.TRANSPARENT);
-                bg.setStroke(dp(1), Color.GRAY);
-                chips[i].setTextColor(Color.GRAY);
-            }
-            chips[i].setBackground(bg);
+            chips[i].setBackground(Ui.ripple(on ? Ui.oval(Ui.ACCENT, 0, 0)
+                    : Ui.oval(0, Ui.STROKE, dp(1))));
+            chips[i].setTextColor(on ? Ui.BG : Ui.TEXT2);
         }
     }
 
-    private Button previewButton(String text, int index, int count) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setAllCaps(false);
-        b.setOnClickListener(v -> startForegroundService(new Intent(this, AlarmService.class)
+    private View toggleCard() {
+        LinearLayout card = Ui.card(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.addView(Ui.text(this, "Alarms", 17, Ui.TEXT, Ui.MEDIUM));
+        texts.addView(Ui.text(this, "Every " + WakeWindow.STEP_MIN + " min · gentle → intense",
+                13, Ui.TEXT2, Ui.REGULAR), Ui.lp(-2, -2, 0, dp(4)));
+        card.addView(texts, Ui.lp(0, -2, 1, 0));
+
+        Switch sw = new Switch(this);
+        int[][] states = {{android.R.attr.state_checked}, {}};
+        sw.setThumbTintList(new ColorStateList(states, new int[]{0xFFFFFFFF, 0xFF9AA1B2}));
+        sw.setTrackTintList(new ColorStateList(states, new int[]{Ui.ACCENT, 0x40FFFFFF}));
+        sw.setChecked(w.enabled);
+        sw.setOnCheckedChangeListener((b, on) -> {
+            w.enabled = on;
+            persist();
+        });
+        card.addView(sw);
+        return card;
+    }
+
+    private View previewPill(String text, int index) {
+        TextView p = Ui.pill(this, text, Ui.SURFACE, Ui.TEXT, Ui.STROKE);
+        p.setOnClickListener(v -> startForegroundService(new Intent(this, AlarmService.class)
                 .setAction(AlarmService.ACTION_RING)
                 .putExtra(AlarmScheduler.EXTRA_INDEX, index)
-                .putExtra(AlarmScheduler.EXTRA_COUNT, count)
+                .putExtra(AlarmScheduler.EXTRA_COUNT, 2)
                 .putExtra(AlarmScheduler.EXTRA_WINDOW_END, 0L)));
-        return b;
+        return p;
     }
 
     private void updateTimeTexts() {
@@ -233,14 +239,13 @@ public class MainActivity extends Activity {
 
     private void refreshNext(WakeWindow.Ring r) {
         if (!w.enabled) {
-            nextText.setText("Alarms off");
+            nextText.setText("Alarms are off");
         } else if (w.days == 0) {
             nextText.setText("No days selected");
         } else if (r == null) {
             nextText.setText("Nothing scheduled");
         } else {
-            nextText.setText("Next: alarm " + (r.index + 1) + " of " + r.count + " in "
-                    + untilText(r.time - System.currentTimeMillis()));
+            nextText.setText("Next alarm in " + untilText(r.time - System.currentTimeMillis()));
         }
     }
 
@@ -254,34 +259,36 @@ public class MainActivity extends Activity {
         return sb.toString();
     }
 
-    // ---------- Warnings: settings that silently break alarms ----------
+    // ---------- warnings: settings that silently break alarms ----------
 
     private void refreshWarnings() {
         warnings.removeAllViews();
         NotificationManager nm = getSystemService(NotificationManager.class);
         if (!nm.areNotificationsEnabled()) {
-            addWarning("Notifications are off — alarms can't show.",
+            addWarning("Notifications are off", "Alarms can't show.",
                     new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                             .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()));
         }
         if (Build.VERSION.SDK_INT >= 34 && !nm.canUseFullScreenIntent()) {
-            addWarning("Full-screen alarm permission is off — the ring screen won't appear on the lock screen.",
+            addWarning("Full-screen alarms are off", "The ring screen won't appear on the lock screen.",
                     new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
                             Uri.parse("package:" + getPackageName())));
         }
         PowerManager pm = getSystemService(PowerManager.class);
         if (!pm.isIgnoringBatteryOptimizations(getPackageName())) {
-            addWarning("Samsung battery saving may delay alarms. Tap → Battery → Unrestricted.",
+            addWarning("Battery saving may delay alarms", "Tap → Battery → Unrestricted.",
                     new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                             Uri.parse("package:" + getPackageName())));
         }
     }
 
-    private void addWarning(String text, Intent fix) {
-        Button b = new Button(this);
-        b.setAllCaps(false);
-        b.setText("⚠ " + text);
-        b.setOnClickListener(v -> {
+    private void addWarning(String title, String body, Intent fix) {
+        LinearLayout card = Ui.card(this);
+        card.setBackground(Ui.ripple(Ui.rounded(0x1AFFC857, dp(22), 0x33FFC857, dp(1))));
+        card.setClickable(true);
+        card.addView(Ui.text(this, title, 15, Ui.MID, Ui.MEDIUM));
+        card.addView(Ui.text(this, body, 13, Ui.TEXT2, Ui.REGULAR), Ui.lp(-2, -2, 0, dp(4)));
+        card.setOnClickListener(v -> {
             try {
                 startActivity(fix);
             } catch (Exception e) {
@@ -289,31 +296,10 @@ public class MainActivity extends Activity {
                         Uri.parse("package:" + getPackageName())));
             }
         });
-        warnings.addView(b);
+        warnings.addView(card, Ui.lp(-1, -2, 0, dp(12)));
     }
 
-    // ---------- Helpers ----------
-
-    /** targetSdk 35 forces edge-to-edge on Android 15+; pad content away from system bars. */
-    private void applyInsets(View root, int basePad) {
-        root.setOnApplyWindowInsetsListener((v, insets) -> {
-            int l, t, r, b;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                Insets i = insets.getInsets(WindowInsets.Type.systemBars()
-                        | WindowInsets.Type.displayCutout());
-                l = i.left; t = i.top; r = i.right; b = i.bottom;
-            } else {
-                l = insets.getSystemWindowInsetLeft();
-                t = insets.getSystemWindowInsetTop();
-                r = insets.getSystemWindowInsetRight();
-                b = insets.getSystemWindowInsetBottom();
-            }
-            v.setPadding(basePad + l, basePad + t, basePad + r, basePad + b);
-            return insets;
-        });
-    }
-
-    private int dp(int v) {
-        return Math.round(v * getResources().getDisplayMetrics().density);
+    private int dp(float v) {
+        return Ui.dp(this, v);
     }
 }

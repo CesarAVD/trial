@@ -1,6 +1,11 @@
 <resources>
-    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:colorAccent">#FF3D7BF7</item>
-        <item name="android:colorPrimary">#FF3D7BF7</item>
+    <!-- Dark-only design; colors in Ui.java. -->
+    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:colorAccent">#FF7C9CFF</item>
+        <item name="android:colorPrimary">#FF7C9CFF</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>
